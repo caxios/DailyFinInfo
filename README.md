@@ -7,7 +7,7 @@ This repository contains daily research reports and news summaries for selected 
 - Maintain a history of reports.
 
 ## Conventions
-- **Markdown Reports**: `[Ticker]_report_[YYYY-MM-DD].md`
+- **Markdown Reports**: `[Year]/[Month]/[Ticker]_report_[YYYY-MM-DD].md`
 
 ## Stocks Tracked
 - NVDA
