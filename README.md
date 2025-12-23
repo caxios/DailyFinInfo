@@ -8,7 +8,6 @@ This repository contains daily research reports and news summaries for selected 
 
 ## Conventions
 - **Markdown Reports**: `[Ticker]_report_[YYYY-MM-DD].md`
-- **HTML Visuals**: `report_[YYYY-MM-DD].html`
 
 ## Stocks Tracked
 - NVDA
