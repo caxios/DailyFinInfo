@@ -11,3 +11,11 @@ This repository contains daily research reports and news summaries for selected 
 
 ## Stocks Tracked
 - NVDA
+- GOOG
+- TSLA
+- MSFT
+- META
+- IREN
+- POET
+- OPEN
+- AVGO
