@@ -1,6 +1,6 @@
 # Daily Financial Info
 
-This repository contains daily research reports and news summaries for selected stocks.
+- This repository contains daily research reports and news summaries for selected stocks.
 
 ## Goals
 - Update stock info (price, news, etc.) daily.
@@ -9,13 +9,5 @@ This repository contains daily research reports and news summaries for selected 
 ## Conventions
 - **Markdown Reports**: `[Year]/[Month]/Daily_Report_[YYYY-MM-DD].md`
 
-## Stocks Tracked
-- NVDA
-- GOOG
-- TSLA
-- MSFT
-- META
-- IREN
-- POET
-- OPEN
-- AVGO
+## Tracking Stocks
+- In _watchlist.py, use watchlist to update stocks to track.
