@@ -2,11 +2,38 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
+import json
+import os
 
-# Import watchlist
-from _watchlist import watchlist
+# Watchlists file path
+WATCHLISTS_FILE = "watchlists.json"
+MEMOS_FILE = "memos.json"
+
+def load_watchlists():
+    """Load watchlists from JSON file"""
+    if os.path.exists(WATCHLISTS_FILE):
+        with open(WATCHLISTS_FILE, "r") as f:
+            return json.load(f)
+    return {"categories": []}
+
+def save_watchlists(data):
+    """Save watchlists to JSON file"""
+    with open(WATCHLISTS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_memos():
+    """Load memos from JSON file"""
+    if os.path.exists(MEMOS_FILE):
+        with open(MEMOS_FILE, "r") as f:
+            return json.load(f)
+    return {"memos": []}
+
+def save_memos(data):
+    """Save memos to JSON file"""
+    with open(MEMOS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
 app = FastAPI(title="Intraday Stock Tracker API")
 
@@ -42,10 +69,10 @@ async def get_watchlist():
 
 
 @app.get("/api/stock/{ticker}")
-async def get_stock_data(ticker: str, date_offset: int = 0):
+async def get_stock_data(ticker: str, target_date: str = None):
     """
     Get intraday data for a stock.
-    date_offset: 0 = today, 1 = yesterday, 2 = 2 days ago, etc.
+    target_date: Date string in YYYY-MM-DD format (defaults to today)
     """
     try:
         stock = yf.Ticker(ticker)
@@ -54,44 +81,40 @@ async def get_stock_data(ticker: str, date_offset: int = 0):
         info = stock.info
         company_name = info.get("shortName", ticker)
         
-        # Calculate target date
-        target_date = datetime.now() - timedelta(days=date_offset)
-        
-        # For historical dates, we need to fetch daily data first
-        # to get the previous day's close
-        if date_offset == 0:
-            # Today: use 1d period with 5m interval
-            intraday_data = stock.history(period="1d", interval="5m")
-            daily_data = stock.history(period="2d", interval="1d")
+        # Parse target date from string, default to today
+        if target_date:
+            target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+            print(f"DEBUG: Received target_date={target_date}, parsed to {target_dt}")
         else:
-            # Historical: need to calculate date ranges
-            end_date = target_date + timedelta(days=1)
-            start_date = target_date - timedelta(days=1)
-            
-            # Get intraday data for the target date
-            intraday_data = stock.history(
-                start=target_date.strftime("%Y-%m-%d"),
-                end=end_date.strftime("%Y-%m-%d"),
-                interval="5m"
-            )
-            
-            # Get daily data to find previous close
-            daily_data = stock.history(
-                start=start_date.strftime("%Y-%m-%d"),
-                end=end_date.strftime("%Y-%m-%d"),
-                interval="1d"
-            )
+            target_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            print(f"DEBUG: No target_date provided, using today: {target_dt}")
+        
+        next_day = target_dt + timedelta(days=1)
+        
+        # Get previous close: end=target_dt (exclusive), so iloc[-1] is the day before target
+        daily_data = stock.history(
+            start=target_dt - timedelta(days=7),
+            end=target_dt,
+            interval="1d"
+        )
+        
+        if daily_data.empty:
+            raise HTTPException(status_code=404, detail=f"No daily data for {ticker}")
+        
+        prev_close = daily_data['Close'].iloc[-1]  # Previous day's close
+        
+        # Get intraday 5-minute data for target date
+        intraday_data = stock.history(
+            start=target_dt,
+            end=next_day,
+            interval="5m"
+        )
         
         if intraday_data.empty:
-            raise HTTPException(status_code=404, detail=f"No data available for {ticker} on this date")
+            raise HTTPException(status_code=404, detail=f"No intraday data for {ticker} on this date")
         
-        if daily_data.empty or len(daily_data) < 1:
-            raise HTTPException(status_code=404, detail=f"No daily data available for {ticker}")
-        
-        # Get previous day's close price
-        prev_close = daily_data.iloc[0]["Close"]
-        
-        # Calculate returns vs previous close
+        # Calculate returns vs previous close (for the intraday graph)
+        # Formula: (current_price - prev_close) / prev_close * 100
         returns = []
         for price in intraday_data["Close"]:
             ret = round(((price - prev_close) / prev_close) * 100, 2)
@@ -100,8 +123,10 @@ async def get_stock_data(ticker: str, date_offset: int = 0):
         # Format timestamps
         timestamps = [ts.strftime("%H:%M") for ts in intraday_data.index]
         
-        # Current price and change
+        # Current price = last intraday close
         current_price = round(intraday_data["Close"].iloc[-1], 2)
+        
+        # Daily change = last intraday return
         change_percent = returns[-1] if returns else 0.0
         
         return StockData(
@@ -118,12 +143,12 @@ async def get_stock_data(ticker: str, date_offset: int = 0):
 
 
 @app.get("/api/stocks/all")
-async def get_all_stocks(date_offset: int = 0):
+async def get_all_stocks(target_date: str = None):
     """Get data for all stocks in the watchlist"""
     results = []
     for ticker in watchlist:
         try:
-            data = await get_stock_data(ticker, date_offset)
+            data = await get_stock_data(ticker, target_date)
             results.append(data.model_dump())
         except HTTPException:
             # Skip failed stocks
@@ -136,7 +161,186 @@ async def get_all_stocks(date_offset: int = 0):
                 "returns": [],
                 "error": True
             })
-    return {"stocks": results, "date_offset": date_offset}
+    return {"stocks": results, "target_date": target_date}
+
+
+# ==================== CATEGORY ENDPOINTS ====================
+
+class CategoryCreate(BaseModel):
+    name: str
+
+class TickerAdd(BaseModel):
+    ticker: str
+
+
+@app.get("/api/categories")
+async def get_categories():
+    """Get all categories"""
+    data = load_watchlists()
+    return {"categories": data.get("categories", [])}
+
+
+@app.post("/api/categories")
+async def create_category(category: CategoryCreate):
+    """Create a new category"""
+    data = load_watchlists()
+    
+    # Generate ID from name
+    category_id = category.name.lower().replace(" ", "_")
+    
+    # Check if already exists
+    for cat in data["categories"]:
+        if cat["id"] == category_id:
+            raise HTTPException(status_code=400, detail="Category already exists")
+    
+    new_category = {
+        "id": category_id,
+        "name": category.name,
+        "tickers": []
+    }
+    data["categories"].append(new_category)
+    save_watchlists(data)
+    
+    return new_category
+
+
+@app.delete("/api/categories/{category_id}")
+async def delete_category(category_id: str):
+    """Delete a category"""
+    data = load_watchlists()
+    data["categories"] = [c for c in data["categories"] if c["id"] != category_id]
+    save_watchlists(data)
+    return {"status": "deleted"}
+
+
+@app.post("/api/categories/{category_id}/tickers")
+async def add_ticker_to_category(category_id: str, ticker_data: TickerAdd):
+    """Add a ticker to a category"""
+    data = load_watchlists()
+    
+    for cat in data["categories"]:
+        if cat["id"] == category_id:
+            ticker = ticker_data.ticker.upper()
+            if ticker not in cat["tickers"]:
+                cat["tickers"].append(ticker)
+                save_watchlists(data)
+            return cat
+    
+    raise HTTPException(status_code=404, detail="Category not found")
+
+
+@app.delete("/api/categories/{category_id}/tickers/{ticker}")
+async def remove_ticker_from_category(category_id: str, ticker: str):
+    """Remove a ticker from a category"""
+    data = load_watchlists()
+    
+    for cat in data["categories"]:
+        if cat["id"] == category_id:
+            ticker_upper = ticker.upper()
+            if ticker_upper in cat["tickers"]:
+                cat["tickers"].remove(ticker_upper)
+                save_watchlists(data)
+            return cat
+    
+    raise HTTPException(status_code=404, detail="Category not found")
+
+
+@app.get("/api/categories/{category_id}/stocks")
+async def get_category_stocks(category_id: str, target_date: str = None):
+    """Get stock data for all tickers in a category"""
+    data = load_watchlists()
+    
+    for cat in data["categories"]:
+        if cat["id"] == category_id:
+            results = []
+            for ticker in cat["tickers"]:
+                try:
+                    stock_data = await get_stock_data(ticker, target_date)
+                    results.append(stock_data.model_dump())
+                except HTTPException:
+                    results.append({
+                        "ticker": ticker,
+                        "company_name": ticker,
+                        "current_price": 0,
+                        "change_percent": 0,
+                        "timestamps": [],
+                        "returns": [],
+                        "error": True
+                    })
+            return {"category": cat, "stocks": results, "target_date": target_date}
+    
+    raise HTTPException(status_code=404, detail="Category not found")
+
+
+# ==================== MEMO ENDPOINTS ====================
+
+class MemoCreate(BaseModel):
+    ticker: str
+    date: str
+    content: str
+
+
+@app.get("/api/memos")
+async def get_all_memos():
+    """Get all memos (for notebook hub)"""
+    data = load_memos()
+    return {"memos": data.get("memos", [])}
+
+
+@app.get("/api/memos/{ticker}/{date}")
+async def get_memo(ticker: str, date: str):
+    """Get memo for a specific stock and date"""
+    data = load_memos()
+    ticker_upper = ticker.upper()
+    
+    for memo in data["memos"]:
+        if memo["ticker"] == ticker_upper and memo["date"] == date:
+            return memo
+    
+    return {"ticker": ticker_upper, "date": date, "content": ""}
+
+
+@app.post("/api/memos")
+async def create_or_update_memo(memo: MemoCreate):
+    """Create or update a memo"""
+    data = load_memos()
+    ticker_upper = memo.ticker.upper()
+    now = datetime.now().isoformat()
+    
+    # Check if memo exists
+    for existing in data["memos"]:
+        if existing["ticker"] == ticker_upper and existing["date"] == memo.date:
+            existing["content"] = memo.content
+            existing["updated_at"] = now
+            save_memos(data)
+            return existing
+    
+    # Create new memo
+    new_memo = {
+        "id": f"{ticker_upper}_{memo.date}",
+        "ticker": ticker_upper,
+        "date": memo.date,
+        "content": memo.content,
+        "created_at": now,
+        "updated_at": now
+    }
+    data["memos"].append(new_memo)
+    save_memos(data)
+    
+    return new_memo
+
+
+@app.delete("/api/memos/{ticker}/{date}")
+async def delete_memo(ticker: str, date: str):
+    """Delete a memo"""
+    data = load_memos()
+    ticker_upper = ticker.upper()
+    
+    data["memos"] = [m for m in data["memos"] 
+                     if not (m["ticker"] == ticker_upper and m["date"] == date)]
+    save_memos(data)
+    
+    return {"status": "deleted"}
 
 
 if __name__ == "__main__":

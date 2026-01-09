@@ -1,64 +1,53 @@
 'use client';
 
 interface DateNavProps {
-    dateOffset: number;
-    onPrev: () => void;
-    onNext: () => void;
-    maxOffset?: number;
+    selectedDate: string;  // YYYY-MM-DD format
+    onDateChange: (date: string) => void;
 }
 
 export default function DateNav({
-    dateOffset,
-    onPrev,
-    onNext,
-    maxOffset = 30
+    selectedDate,
+    onDateChange,
 }: DateNavProps) {
-    const date = new Date();
-    date.setDate(date.getDate() - dateOffset);
+    const today = new Date();
+    const maxDate = today.toISOString().split('T')[0];
 
+    // Min date: 60 days ago
+    const minDate = new Date();
+    minDate.setDate(today.getDate() - 60);
+    const minDateStr = minDate.toISOString().split('T')[0];
+
+    // Format selected date for display
+    const displayDate = new Date(selectedDate + 'T00:00:00');
     const options: Intl.DateTimeFormatOptions = {
-        weekday: 'short',
-        month: 'short',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
         day: 'numeric'
     };
-    const dateString = date.toLocaleDateString('en-US', options);
-
-    let label = 'Today';
-    if (dateOffset === 1) label = 'Yesterday';
-    else if (dateOffset > 1) label = `${dateOffset} days ago`;
+    const dateString = displayDate.toLocaleDateString('en-US', options);
 
     return (
-        <nav className="flex items-center gap-4 bg-slate-800/50 px-4 py-2 rounded-xl mb-6">
-            <button
-                onClick={onPrev}
-                disabled={dateOffset >= maxOffset}
-                className="
-          bg-slate-700 border border-slate-600 text-white
-          w-9 h-9 rounded-full flex items-center justify-center
-          transition-all hover:bg-blue-500 hover:border-blue-500
-          disabled:opacity-30 disabled:cursor-not-allowed
-        "
-            >
-                ←
-            </button>
-
-            <div className="flex-1 text-center">
-                <div className="text-xs text-slate-400">{label}</div>
-                <div className="font-medium text-white">{dateString}</div>
+        <nav className="bg-slate-800/50 px-4 py-3 rounded-xl">
+            <div className="flex items-center justify-center gap-4">
+                <span className="text-slate-400">📅</span>
+                <input
+                    type="date"
+                    value={selectedDate}
+                    max={maxDate}
+                    min={minDateStr}
+                    onChange={(e) => onDateChange(e.target.value)}
+                    className="
+            bg-slate-700 border border-slate-600 text-white
+            px-4 py-2 rounded-lg
+            focus:outline-none focus:border-blue-500
+            cursor-pointer
+          "
+                />
             </div>
-
-            <button
-                onClick={onNext}
-                disabled={dateOffset === 0}
-                className="
-          bg-slate-700 border border-slate-600 text-white
-          w-9 h-9 rounded-full flex items-center justify-center
-          transition-all hover:bg-blue-500 hover:border-blue-500
-          disabled:opacity-30 disabled:cursor-not-allowed
-        "
-            >
-                →
-            </button>
+            <div className="text-center mt-2 text-slate-300 font-medium">
+                {dateString}
+            </div>
         </nav>
     );
 }

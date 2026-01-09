@@ -1,0 +1,28 @@
+{
+  "memos": [
+    {
+      "id": "NVDA_2026-01-09",
+      "ticker": "NVDA",
+      "date": "2026-01-09",
+      "content": "kkkk",
+      "created_at": "2026-01-09T15:28:02.047136",
+      "updated_at": "2026-01-09T15:28:05.429556"
+    },
+    {
+      "id": "INTC_2026-01-09",
+      "ticker": "INTC",
+      "date": "2026-01-09",
+      "content": "lkmlkmlm",
+      "created_at": "2026-01-09T15:28:09.944399",
+      "updated_at": "2026-01-09T15:28:09.944399"
+    },
+    {
+      "id": "NVDA_2026-01-08",
+      "ticker": "NVDA",
+      "date": "2026-01-08",
+      "content": "lkmlmklkmmmm,.,....,.,,..,",
+      "created_at": "2026-01-09T15:28:31.220962",
+      "updated_at": "2026-01-09T15:28:31.220962"
+    }
+  ]
+}

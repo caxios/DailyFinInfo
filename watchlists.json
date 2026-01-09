@@ -1,0 +1,40 @@
+{
+  "categories": [
+    {
+      "id": "semiconductor",
+      "name": "semiconductor",
+      "tickers": [
+        "NVDA",
+        "AMD",
+        "INTC",
+        "AVGO"
+      ]
+    },
+    {
+      "id": "datacenter",
+      "name": "datacenter",
+      "tickers": [
+        "HUT",
+        "IREN",
+        "CRWV"
+      ]
+    },
+    {
+      "id": "hottopic",
+      "name": "hottopic",
+      "tickers": [
+        "TSLA",
+        "POET",
+        "OPEN"
+      ]
+    },
+    {
+      "id": "asdadasdasdd",
+      "name": "asdadasdasdd",
+      "tickers": [
+        "ASDASD",
+        "ASDASDAD"
+      ]
+    }
+  ]
+}

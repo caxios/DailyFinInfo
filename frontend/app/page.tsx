@@ -1,38 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Stock, StocksResponse } from '@/types';
-import StockCard from '@/components/StockCard';
+import { useState } from 'react';
 import DateNav from '@/components/DateNav';
+import CategoryList from '@/components/CategoryList';
+import NotebookModal from '@/components/NotebookModal';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+// Get today's date in YYYY-MM-DD format
+function getTodayString() {
+  return new Date().toISOString().split('T')[0];
+}
 
 export default function Home() {
-  const [stocks, setStocks] = useState<Stock[]>([]);
-  const [dateOffset, setDateOffset] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchStocks();
-  }, [dateOffset]);
-
-  async function fetchStocks() {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`${API_URL}/api/stocks/all?date_offset=${dateOffset}`);
-      if (!response.ok) throw new Error('Failed to fetch stocks');
-
-      const data: StocksResponse = await response.json();
-      setStocks(data.stocks);
-    } catch (err) {
-      setError('Error loading stocks. Is the backend running?');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [showNotebook, setShowNotebook] = useState(false);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4">
@@ -42,31 +22,38 @@ export default function Home() {
           <h1 className="text-xl font-semibold">📈 Intraday Tracker</h1>
         </header>
 
-        {/* Date Navigation */}
-        <DateNav
-          dateOffset={dateOffset}
-          onPrev={() => setDateOffset(prev => prev + 1)}
-          onNext={() => setDateOffset(prev => Math.max(0, prev - 1))}
-        />
-
-        {/* Stock List */}
-        <div className="flex flex-col gap-3">
-          {loading ? (
-            <div className="text-center py-12 text-slate-400">
-              <div className="w-10 h-10 border-3 border-slate-600 border-t-blue-500 rounded-full animate-spin mx-auto mb-4" />
-              <p>Loading stocks...</p>
-            </div>
-          ) : error ? (
-            <div className="text-center py-12 text-slate-400">
-              <p>{error}</p>
-            </div>
-          ) : (
-            stocks.map((stock) => (
-              <StockCard key={stock.ticker} stock={stock} />
-            ))
-          )}
+        {/* Date Picker with Notebook Icon */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex-1">
+            <DateNav
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+            />
+          </div>
+          <button
+            onClick={() => setShowNotebook(true)}
+            className="p-3 bg-slate-800/50 rounded-xl hover:bg-slate-700/50 transition-all text-2xl"
+            title="Open Notebook"
+          >
+            📓
+          </button>
         </div>
+
+        {/* Watchlist Section Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm text-slate-400 uppercase tracking-wide">
+            Portfolios & Watchlists
+          </h2>
+        </div>
+
+        {/* Category List */}
+        <CategoryList selectedDate={selectedDate} />
       </div>
+
+      {/* Notebook Modal */}
+      {showNotebook && (
+        <NotebookModal onClose={() => setShowNotebook(false)} />
+      )}
     </main>
   );
 }
