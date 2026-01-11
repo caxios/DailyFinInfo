@@ -16,7 +16,8 @@
       "tickers": [
         "HUT",
         "IREN",
-        "CRWV"
+        "CRWV",
+        "NBIS"
       ]
     },
     {
@@ -25,15 +26,21 @@
       "tickers": [
         "TSLA",
         "POET",
-        "OPEN"
+        "OPEN",
+        "OKLO",
+        "SMR"
       ]
     },
     {
-      "id": "asdadasdasdd",
-      "name": "asdadasdasdd",
+      "id": "bigtech",
+      "name": "bigtech",
       "tickers": [
-        "ASDASD",
-        "ASDASDAD"
+        "GOOG",
+        "NVDA",
+        "AMZN",
+        "MSFT",
+        "AAPL",
+        "META"
       ]
     }
   ]

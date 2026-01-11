@@ -10,6 +10,7 @@ import os
 # Watchlists file path
 WATCHLISTS_FILE = "watchlists.json"
 MEMOS_FILE = "memos.json"
+RETURNS_CACHE_FILE = "returns.json"
 
 def load_watchlists():
     """Load watchlists from JSON file"""
@@ -34,6 +35,33 @@ def save_memos(data):
     """Save memos to JSON file"""
     with open(MEMOS_FILE, "w") as f:
         json.dump(data, f, indent=2)
+
+# Returns cache functions
+def load_returns_cache():
+    """Load returns cache from JSON file"""
+    if os.path.exists(RETURNS_CACHE_FILE):
+        with open(RETURNS_CACHE_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_returns_cache(data):
+    """Save returns cache to JSON file"""
+    with open(RETURNS_CACHE_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+def get_cached_stock(ticker: str, date: str):
+    """Get cached stock data for ticker+date, returns None if not cached"""
+    cache = load_returns_cache()
+    cache_key = f"{ticker.upper()}_{date}"
+    return cache.get(cache_key)
+
+def cache_stock_data(ticker: str, date: str, data: dict):
+    """Save stock data to cache"""
+    cache = load_returns_cache()
+    cache_key = f"{ticker.upper()}_{date}"
+    data["cached_at"] = datetime.now().isoformat()
+    cache[cache_key] = data
+    save_returns_cache(cache)
 
 app = FastAPI(title="Intraday Stock Tracker API")
 
@@ -75,20 +103,39 @@ async def get_stock_data(ticker: str, target_date: str = None):
     target_date: Date string in YYYY-MM-DD format (defaults to today)
     """
     try:
-        stock = yf.Ticker(ticker)
-        
-        # Get company info
-        info = stock.info
-        company_name = info.get("shortName", ticker)
+        # Normalize ticker and date
+        ticker_upper = ticker.upper()
         
         # Parse target date from string, default to today
         if target_date:
-            target_dt = datetime.strptime(target_date, "%Y-%m-%d")
-            print(f"DEBUG: Received target_date={target_date}, parsed to {target_dt}")
+            date_str = target_date
         else:
-            target_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            print(f"DEBUG: No target_date provided, using today: {target_dt}")
+            date_str = datetime.now().strftime("%Y-%m-%d")
         
+        # Check cache first
+        cached = get_cached_stock(ticker_upper, date_str)
+        if cached:
+            print(f"CACHE HIT: {ticker_upper}_{date_str}")
+            return StockData(
+                ticker=cached["ticker"],
+                company_name=cached["company_name"],
+                current_price=cached["current_price"],
+                change_percent=cached["change_percent"],
+                timestamps=cached["timestamps"],
+                returns=cached["returns"]
+            )
+        
+        print(f"CACHE MISS: {ticker_upper}_{date_str} - fetching from yfinance")
+        
+        # Not in cache - fetch from yfinance
+        stock = yf.Ticker(ticker_upper)
+        
+        # Get company info
+        info = stock.info
+        company_name = info.get("shortName", ticker_upper)
+        
+        # Parse date
+        target_dt = datetime.strptime(date_str, "%Y-%m-%d")
         next_day = target_dt + timedelta(days=1)
         
         # Get previous close: end=target_dt (exclusive), so iloc[-1] is the day before target
@@ -114,7 +161,6 @@ async def get_stock_data(ticker: str, target_date: str = None):
             raise HTTPException(status_code=404, detail=f"No intraday data for {ticker} on this date")
         
         # Calculate returns vs previous close (for the intraday graph)
-        # Formula: (current_price - prev_close) / prev_close * 100
         returns = []
         for price in intraday_data["Close"]:
             ret = round(((price - prev_close) / prev_close) * 100, 2)
@@ -129,8 +175,20 @@ async def get_stock_data(ticker: str, target_date: str = None):
         # Daily change = last intraday return
         change_percent = returns[-1] if returns else 0.0
         
+        # Save to cache
+        cache_data = {
+            "ticker": ticker_upper,
+            "date": date_str,
+            "company_name": company_name,
+            "current_price": current_price,
+            "change_percent": change_percent,
+            "timestamps": timestamps,
+            "returns": returns
+        }
+        cache_stock_data(ticker_upper, date_str, cache_data)
+        
         return StockData(
-            ticker=ticker,
+            ticker=ticker_upper,
             company_name=company_name,
             current_price=current_price,
             change_percent=change_percent,
